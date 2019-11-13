@@ -68,10 +68,12 @@ TESTS = [
 # skip python2 for rpc and dist_autograd tests that do not support python2
 if PY33:
     TESTS.extend([
-        'rpc_fork',
-        'rpc_spawn',
-        'dist_autograd_fork',
-        'dist_autograd_spawn',
+        'distributed/rpc/process_group/rpc_fork',
+        'distributed/rpc/process_group/rpc_spawn',
+        'distributed/rpc/process_group/dist_autograd_fork',
+        'distributed/rpc/process_group/dist_autograd_spawn',
+        'distributed/rpc/process_group/dist_optimizer_fork',
+        'distributed/rpc/process_group/dist_optimizer_spawn',
     ])
 
 # skip < 3.6 b/c fstrings added in 3.6
@@ -82,19 +84,23 @@ if PY36:
 
 WINDOWS_BLACKLIST = [
     'distributed',
-    'rpc_fork',
-    'rpc_spawn',
-    'dist_autograd_fork',
-    'dist_autograd_spawn',
+    'distributed/rpc/process_group/rpc_fork',
+    'distributed/rpc/process_group/rpc_spawn',
+    'distributed/rpc/process_group/dist_autograd_fork',
+    'distributed/rpc/process_group/dist_autograd_spawn',
+    'distributed/rpc/process_group/dist_optimizer_fork',
+    'distributed/rpc/process_group/dist_optimizer_spawn',
 ]
 
 ROCM_BLACKLIST = [
     'cpp_extensions',
     'multiprocessing',
-    'rpc_fork',
-    'rpc_spawn',
-    'dist_autograd_fork',
-    'dist_autograd_spawn',
+    'distributed/rpc/process_group/rpc_fork',
+    'distributed/rpc/process_group/rpc_spawn',
+    'distributed/rpc/process_group/dist_autograd_fork',
+    'distributed/rpc/process_group/dist_autograd_spawn',
+    'distributed/rpc/process_group/dist_optimizer_fork',
+    'distributed/rpc/process_group/dist_optimizer_spawn',
 ]
 
 DISTRIBUTED_TESTS_CONFIG = {}
@@ -370,7 +376,7 @@ def exclude_tests(exclude_list, selected_tests, exclude_message=None):
     tests_copy = selected_tests[:]
     for exclude_test in exclude_list:
         for test in tests_copy:
-            if test.startswith(exclude_test):
+            if test == exclude_test:
                 if exclude_message is not None:
                     print_to_stderr('Excluding {} {}'.format(test, exclude_message))
                 selected_tests.remove(test)
@@ -427,17 +433,23 @@ def main():
         selected_tests = filter(lambda test_name: "jit" in test_name, TESTS)
 
     for test in selected_tests:
-        test_name = 'test_{}'.format(test)
+        splits = test.rsplit("/", 1)
+        if len(splits) > 1:
+            relative_path, test = splits
+        else:
+            relative_path = ""
+        # path_to_module is like "distributed/rpc/process_group/test_rpc_fork".
+        path_to_module = os.path.join(relative_path, 'test_{}'.format(test))
         test_module = parse_test_module(test)
 
         # Printing the date here can help diagnose which tests are slow
-        print_to_stderr('Running {} ... [{}]'.format(test_name, datetime.now()))
+        print_to_stderr('Running {} ... [{}]'.format(path_to_module, datetime.now()))
         handler = CUSTOM_HANDLERS.get(test_module, run_test)
-        return_code = handler(executable, test_name, test_directory, options)
+        return_code = handler(executable, path_to_module, test_directory, options)
         assert isinstance(return_code, int) and not isinstance(
             return_code, bool), 'Return code should be an integer'
         if return_code != 0:
-            message = '{} failed!'.format(test_name)
+            message = '{} failed!'.format(path_to_module)
             if return_code < 0:
                 # subprocess.Popen returns the child process' exit signal as
                 # return code -N, where N is the signal number.
